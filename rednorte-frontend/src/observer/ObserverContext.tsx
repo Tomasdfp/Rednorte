@@ -3,6 +3,15 @@ import type { SolicitudListaEspera, Cita, ReasignacionLog, Paciente } from '../m
 
 const BFF_URL = 'http://localhost:8080/api';
 
+const fetchWithAuth = (url: string, options: RequestInit = {}) => {
+  const token = localStorage.getItem("token");
+  const headers = new Headers(options.headers || {});
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  return fetch(url, { ...options, headers });
+};
+
 interface ObserverContextProps {
   appointments: Cita[];
   logs: ReasignacionLog[];
@@ -23,17 +32,17 @@ export const ObserverProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [latestNotification, setLatestNotification] = useState<any>(null);
 
   const loadData = () => {
-    fetch(`${BFF_URL}/appointments`)
+    fetchWithAuth(`${BFF_URL}/appointments`)
       .then(res => res.json())
       .then(data => setAppointments(data))
       .catch(err => console.error("Error loading appointments:", err));
 
-    fetch(`${BFF_URL}/reassignments`)
+    fetchWithAuth(`${BFF_URL}/reassignments`)
       .then(res => res.json())
       .then(data => setLogs(data))
       .catch(err => console.error("Error loading reassignments:", err));
 
-    fetch(`${BFF_URL}/waitlist`)
+    fetchWithAuth(`${BFF_URL}/waitlist`)
       .then(res => res.json())
       .then(data => setRequests(data))
       .catch(err => console.error("Error loading waitlist:", err));
@@ -42,7 +51,8 @@ export const ObserverProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     loadData();
 
-    const eventSource = new EventSource(`${BFF_URL}/notifications/stream`);
+    const token = localStorage.getItem("token");
+    const eventSource = new EventSource(`${BFF_URL}/notifications/stream?token=${encodeURIComponent(token || '')}`);
 
     eventSource.addEventListener('message', (event) => {
       try {
@@ -66,7 +76,7 @@ export const ObserverProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           if (payload.details && payload.details.logs) {
             setLogs(payload.details.logs);
           }
-          fetch(`${BFF_URL}/waitlist`)
+          fetchWithAuth(`${BFF_URL}/waitlist`)
             .then(res => res.json())
             .then(data => setRequests(data))
             .catch(err => console.error("Error updating waitlist:", err));
@@ -94,7 +104,7 @@ export const ObserverProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           if (payload.details && payload.details.logs) {
             setLogs(payload.details.logs);
           }
-          fetch(`${BFF_URL}/waitlist`)
+          fetchWithAuth(`${BFF_URL}/waitlist`)
             .then(res => res.json())
             .then(data => setRequests(data));
           setLatestNotification(null);
@@ -139,14 +149,14 @@ export const useWaitingList = () => {
 
   const addRequest = async (request: SolicitudListaEspera) => {
     try {
-      const res = await fetch(`${BFF_URL}/waitlist`, {
+      const res = await fetchWithAuth(`${BFF_URL}/waitlist`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request)
       });
       if (res.ok) {
         const saved = await res.json();
-        const wlRes = await fetch(`${BFF_URL}/waitlist`);
+        const wlRes = await fetchWithAuth(`${BFF_URL}/waitlist`);
         const wlData = await wlRes.json();
         setRequests(wlData);
         return saved;
@@ -158,11 +168,11 @@ export const useWaitingList = () => {
 
   const updateRequestStatus = async (idSolicitud: number, status: SolicitudListaEspera['estado']) => {
     try {
-      const res = await fetch(`${BFF_URL}/waitlist/${idSolicitud}/status?status=${status}`, {
+      const res = await fetchWithAuth(`${BFF_URL}/waitlist/${idSolicitud}/status?status=${status}`, {
         method: 'PUT'
       });
       if (res.ok) {
-        const wlRes = await fetch(`${BFF_URL}/waitlist`);
+        const wlRes = await fetchWithAuth(`${BFF_URL}/waitlist`);
         const wlData = await wlRes.json();
         setRequests(wlData);
       }
@@ -186,7 +196,7 @@ export const useAppointments = () => {
 
   const cancelAppointment = async (idCita: number, reason: string, _patients: Paciente[], specialty: string) => {
     try {
-      await fetch(`${BFF_URL}/appointments/cancel/${idCita}?reason=${encodeURIComponent(reason)}&specialty=${encodeURIComponent(specialty)}`, {
+      await fetchWithAuth(`${BFF_URL}/appointments/cancel/${idCita}?reason=${encodeURIComponent(reason)}&specialty=${encodeURIComponent(specialty)}`, {
         method: 'POST'
       });
     } catch (err) {
@@ -196,7 +206,7 @@ export const useAppointments = () => {
 
   const requestAppointment = async (idPaciente: number, specialty: string, _severity: number, observations: string, _patients: Paciente[]) => {
     try {
-      const res = await fetch(`${BFF_URL}/appointments/request`, {
+      const res = await fetchWithAuth(`${BFF_URL}/appointments/request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -219,7 +229,7 @@ export const useAppointments = () => {
 
   const markPatientArrival = async (idCita: number, _patients: Paciente[]) => {
     try {
-      await fetch(`${BFF_URL}/appointments/check-in/${idCita}`, {
+      await fetchWithAuth(`${BFF_URL}/appointments/check-in/${idCita}`, {
         method: 'POST'
       });
     } catch (err) {
@@ -229,7 +239,7 @@ export const useAppointments = () => {
 
   const resetAllData = async () => {
     try {
-      await fetch(`${BFF_URL}/reset`, {
+      await fetchWithAuth(`${BFF_URL}/reset`, {
         method: 'POST'
       });
     } catch (err) {

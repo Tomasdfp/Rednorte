@@ -40,12 +40,18 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     if (!patientRut) return;
 
     try {
-      const res = await fetch(`http://localhost:8080/api/patients/rut/${encodeURIComponent(patientRut.trim())}`);
+      const res = await fetch(`http://localhost:8080/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'patient', patientRut: patientRut.trim() })
+      });
       if (res.ok) {
-        const patient = await res.json();
-        onLogin({ role: 'patient', data: patient });
+        const data = await res.json();
+        localStorage.setItem("token", data.token);
+        onLogin({ role: 'patient', data: data.data });
       } else {
-        alert('Paciente no registrado. Intente con un RUT de prueba, por ejemplo: 12.345.678-9');
+        const errorText = await res.text();
+        alert(errorText || 'Paciente no registrado. Intente con un RUT de prueba, por ejemplo: 12.345.678-9');
       }
     } catch (err) {
       console.error("Error authenticating patient:", err);
@@ -53,22 +59,51 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     }
   };
 
-  const handleDoctorSubmit = (e: React.FormEvent) => {
+  const handleDoctorSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const doctor = doctors.find(d => d.idProfesional.toString() === selectedDoctorId);
-    if (doctor) {
-      onLogin({ role: 'doctor', data: doctor });
-    } else {
-      alert('Médico no encontrado.');
+    if (!selectedDoctorId) return;
+
+    try {
+      const res = await fetch(`http://localhost:8080/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'doctor', doctorId: selectedDoctorId })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem("token", data.token);
+        onLogin({ role: 'doctor', data: data.data });
+      } else {
+        const errorText = await res.text();
+        alert(errorText || 'Médico no registrado.');
+      }
+    } catch (err) {
+      console.error("Error authenticating doctor:", err);
+      alert('Error de conexión con el servidor.');
     }
   };
 
-  const handleAdminSubmit = (e: React.FormEvent) => {
+  const handleAdminSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (adminUser.trim() === 'recep' && adminPass === 'recep123') {
-      onLogin({ role: 'receptionist', data: { name: 'Recepción RedNorte' } });
-    } else {
-      alert('Credenciales de recepcionista incorrectas. Use: recep / recep123');
+    if (!adminUser || !adminPass) return;
+
+    try {
+      const res = await fetch(`http://localhost:8080/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'receptionist', adminUser, adminPass })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem("token", data.token);
+        onLogin({ role: 'receptionist', data: data.data });
+      } else {
+        const errorText = await res.text();
+        alert(errorText || 'Credenciales de recepcionista incorrectas. Use: recep / recep123');
+      }
+    } catch (err) {
+      console.error("Error authenticating receptionist:", err);
+      alert('Error de conexión con el servidor.');
     }
   };
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAppointments } from './observer/ObserverContext';
+import { useAppointments, ObserverProvider } from './observer/ObserverContext';
 import { LoginView } from './views/LoginView';
 import { DoctorPortalView } from './views/DoctorPortalView';
 import { PatientPortalView } from './views/PatientPortalView';
@@ -13,13 +13,15 @@ import {
   UserCheck
 } from 'lucide-react';
 
-export const App: React.FC = () => {
-  // Session authentication state
-  const [currentUser, setCurrentUser] = useState<{
+interface AuthenticatedAppProps {
+  currentUser: {
     role: 'patient' | 'doctor' | 'receptionist';
     data: any;
-  } | null>(null);
-  
+  };
+  onLogout: () => void;
+}
+
+const AuthenticatedApp: React.FC<AuthenticatedAppProps> = ({ currentUser, onLogout }) => {
   // Real-time Observer notifications
   const { latestNotification } = useAppointments();
   const [showToast, setShowToast] = useState(false);
@@ -39,17 +41,7 @@ export const App: React.FC = () => {
     }
   }, [latestNotification]);
 
-  // Logout handler
-  const handleLogout = () => {
-    setCurrentUser(null);
-  };
-
-  // 1. Render Login Portal if not authenticated
-  if (currentUser === null) {
-    return <LoginView onLogin={(user) => setCurrentUser(user)} />;
-  }
-
-  // 2. Render Patient View
+  // 1. Render Patient View
   if (currentUser.role === 'patient') {
     return (
       <div className="app-container">
@@ -72,7 +64,7 @@ export const App: React.FC = () => {
             <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <p style={{ fontWeight: 600, color: 'hsl(var(--primary))' }}>{currentUser.data.nombreCompleto}</p>
               <p>Rol: Paciente</p>
-              <button className="btn btn-secondary" onClick={handleLogout} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.5rem' }}>
+              <button className="btn btn-secondary" onClick={onLogout} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.5rem' }}>
                 <LogOut size={14} />
                 Salir
               </button>
@@ -80,12 +72,12 @@ export const App: React.FC = () => {
           </div>
         </aside>
 
-        <PatientPortalView patient={currentUser.data} onLogout={handleLogout} />
+        <PatientPortalView patient={currentUser.data} onLogout={onLogout} />
       </div>
     );
   }
 
-  // 3. Render Doctor View
+  // 2. Render Doctor View
   if (currentUser.role === 'doctor') {
     return (
       <div className="app-container">
@@ -108,7 +100,7 @@ export const App: React.FC = () => {
             <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <p style={{ fontWeight: 600, color: 'hsl(var(--primary))' }}>{currentUser.data.nombreCompleto}</p>
               <p>Rol: Médico</p>
-              <button className="btn btn-secondary" onClick={handleLogout} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.5rem' }}>
+              <button className="btn btn-secondary" onClick={onLogout} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.5rem' }}>
                 <LogOut size={14} />
                 Salir
               </button>
@@ -116,12 +108,12 @@ export const App: React.FC = () => {
           </div>
         </aside>
 
-        <DoctorPortalView doctor={currentUser.data} onLogout={handleLogout} />
+        <DoctorPortalView doctor={currentUser.data} onLogout={onLogout} />
       </div>
     );
   }
 
-  // 4. Render Receptionist View
+  // 3. Render Receptionist View
   return (
     <div className="app-container">
       <aside className="sidebar">
@@ -143,7 +135,7 @@ export const App: React.FC = () => {
           <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <p style={{ fontWeight: 600, color: 'hsl(var(--primary))' }}>{currentUser.data.name}</p>
             <p>Rol: Recepcionista</p>
-            <button className="btn btn-secondary" onClick={handleLogout} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.5rem' }}>
+            <button className="btn btn-secondary" onClick={onLogout} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.5rem' }}>
               <LogOut size={14} />
               Salir
             </button>
@@ -209,3 +201,27 @@ export const App: React.FC = () => {
     </div>
   );
 };
+
+export const App: React.FC = () => {
+  // Session authentication state
+  const [currentUser, setCurrentUser] = useState<{
+    role: 'patient' | 'doctor' | 'receptionist';
+    data: any;
+  } | null>(null);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    setCurrentUser(null);
+  };
+
+  if (currentUser === null) {
+    return <LoginView onLogin={(user) => setCurrentUser(user)} />;
+  }
+
+  return (
+    <ObserverProvider>
+      <AuthenticatedApp currentUser={currentUser} onLogout={handleLogout} />
+    </ObserverProvider>
+  );
+};
+
