@@ -27,8 +27,12 @@ public class CancellationController {
     private final NotificationAuditRepository auditRepo;
     private final RestTemplate restTemplate = new RestTemplate();
 
-    private static final String WAITLIST_URL = "http://localhost:8081/api";
-    private static final String BFF_URL = "http://localhost:8080/api";
+    private static final String WAITLIST_URL = System.getenv("WAITLIST_SERVICE_URL") != null 
+            ? System.getenv("WAITLIST_SERVICE_URL") 
+            : "http://localhost:8081/api";
+    private static final String BFF_URL = System.getenv("BFF_SERVICE_URL") != null 
+            ? System.getenv("BFF_SERVICE_URL") 
+            : "http://localhost:8080/api";
 
     public CancellationController(CitaRepository appointmentRepo, ReasignacionLogRepository logRepo, NotificationAuditRepository auditRepo) {
         this.appointmentRepo = appointmentRepo;

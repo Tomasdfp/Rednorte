@@ -31,7 +31,12 @@ export const PatientPortalView: React.FC<PatientPortalViewProps> = ({ patient, o
   const [notifications, setNotifications] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch(`http://localhost:8080/api/timeline/${patient.rut}`)
+    const token = localStorage.getItem("token");
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    fetch(`http://localhost:8080/api/timeline/${patient.rut}`, { headers })
       .then(res => res.json())
       .then(data => {
         if (data.notifications) {
@@ -46,9 +51,14 @@ export const PatientPortalView: React.FC<PatientPortalViewProps> = ({ patient, o
     e.preventDefault();
 
     try {
+      const token = localStorage.getItem("token");
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
       const res = await fetch(`http://localhost:8080/api/patients`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           ...patient,
           telefono: phone,

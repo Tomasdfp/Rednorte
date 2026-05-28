@@ -4,6 +4,7 @@ import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import com.rednorte.bff.security.JwtUtil;
 
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -15,9 +16,84 @@ public class BffController {
 
     private final RestTemplate restTemplate = new RestTemplate();
     private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
+    private final JwtUtil jwtUtil;
 
-    private static final String WAITLIST_SERVICE_URL = "http://localhost:8081/api";
-    private static final String CANCELLATION_SERVICE_URL = "http://localhost:8082/api";
+    public BffController(JwtUtil jwtUtil) {
+        this.jwtUtil = jwtUtil;
+    }
+
+    @PostMapping("/auth/login")
+    public ResponseEntity<?> login(@RequestBody Map<String, String> credentials) {
+        String role = credentials.get("role");
+        
+        if ("patient".equals(role)) {
+            String rut = credentials.get("patientRut");
+            try {
+                ResponseEntity<Map> response = restTemplate.getForEntity(
+                        WAITLIST_SERVICE_URL + "/patients/rut/" + rut, Map.class);
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    Map patient = response.getBody();
+                    String token = jwtUtil.generateToken(rut, "ROLE_PATIENT");
+                    
+                    Map<String, Object> result = new HashMap<>();
+                    result.put("token", token);
+                    result.put("role", "patient");
+                    result.put("data", patient);
+                    return ResponseEntity.ok(result);
+                }
+            } catch (Exception e) {
+                // fall through
+            }
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Paciente no registrado.");
+            
+        } else if ("doctor".equals(role)) {
+            String doctorIdStr = credentials.get("doctorId");
+            try {
+                List<Map> doctors = restTemplate.getForObject(WAITLIST_SERVICE_URL + "/doctors", List.class);
+                if (doctors != null) {
+                    Optional<Map> doctorOpt = doctors.stream()
+                            .filter(d -> d.get("idProfesional").toString().equals(doctorIdStr))
+                            .findFirst();
+                    if (doctorOpt.isPresent()) {
+                        Map doctor = doctorOpt.get();
+                        String token = jwtUtil.generateToken(doctorIdStr, "ROLE_DOCTOR");
+                        
+                        Map<String, Object> result = new HashMap<>();
+                        result.put("token", token);
+                        result.put("role", "doctor");
+                        result.put("data", doctor);
+                        return ResponseEntity.ok(result);
+                    }
+                }
+            } catch (Exception e) {
+                // fall through
+            }
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Médico no registrado.");
+            
+        } else if ("receptionist".equals(role)) {
+            String username = credentials.get("adminUser");
+            String password = credentials.get("adminPass");
+            if ("recep".equals(username) && "recep123".equals(password)) {
+                String token = jwtUtil.generateToken(username, "ROLE_RECEPTIONIST");
+                
+                Map<String, Object> result = new HashMap<>();
+                result.put("token", token);
+                result.put("role", "receptionist");
+                result.put("data", Map.of("name", "Recepción RedNorte"));
+                return ResponseEntity.ok(result);
+            }
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Credenciales incorrectas.");
+        }
+        
+        return ResponseEntity.badRequest().body("Rol no válido.");
+    }
+
+    private static final String WAITLIST_SERVICE_URL = System.getenv("WAITLIST_SERVICE_URL") != null 
+            ? System.getenv("WAITLIST_SERVICE_URL") 
+            : "http://localhost:8081/api";
+    private static final String CANCELLATION_SERVICE_URL = System.getenv("CANCELLATION_SERVICE_URL") != null 
+            ? System.getenv("CANCELLATION_SERVICE_URL") 
+            : "http://localhost:8082/api";
 
     @GetMapping("/notifications/stream")
     public SseEmitter getNotificationStream() {
