@@ -1,0 +1,6 @@
+**/target/
+**/node_modules/
+**/*.h2.db
+.idea/
+.vscode/
+.DS_Store
