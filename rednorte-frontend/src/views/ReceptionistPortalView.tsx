@@ -3,6 +3,7 @@ import { useWaitingList, useAppointments } from '../observer/ObserverContext';
 import { mockDoctors, mockPatients, mockMedicalAttentions } from '../mockData';
 import type { Paciente, SolicitudListaEspera, ProfesionalSalud } from '../mockData';
 import { UserCheck, Search, UserPlus, Trash2, FolderSync, PlusCircle } from 'lucide-react';
+import { validateRut } from '../utils/validation';
 
 export const ReceptionistPortalView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'checkin' | 'search' | 'waitlist' | 'users'>('checkin');
@@ -113,6 +114,10 @@ export const ReceptionistPortalView: React.FC = () => {
       alert('Complete los campos obligatorios.');
       return;
     }
+    if (!validateRut(patRut)) {
+      alert('RUT de paciente no válido. Por favor, ingrese un RUT chileno correcto (ej: 12.345.678-9).');
+      return;
+    }
     const exists = mockPatients.some(p => p.rut.trim() === patRut.trim());
     if (exists) {
       alert(`Error: Ya existe el paciente.`);
@@ -141,6 +146,10 @@ export const ReceptionistPortalView: React.FC = () => {
       alert('Complete los campos obligatorios.');
       return;
     }
+    if (!validateRut(docRut)) {
+      alert('RUT de médico no válido. Por favor, ingrese un RUT chileno correcto (ej: 12.345.678-9).');
+      return;
+    }
     const exists = mockDoctors.some(d => d.rut.trim() === docRut.trim());
     if (exists) {
       alert('Error: Ya existe el médico.');
@@ -166,6 +175,10 @@ export const ReceptionistPortalView: React.FC = () => {
     e.preventDefault();
     if (!wlRut || !wlName || !wlBirth || !wlDiagnosis) {
       alert('Complete los campos obligatorios.');
+      return;
+    }
+    if (!validateRut(wlRut)) {
+      alert('RUT no válido. Por favor, ingrese un RUT chileno correcto (ej: 12.345.678-9).');
       return;
     }
 

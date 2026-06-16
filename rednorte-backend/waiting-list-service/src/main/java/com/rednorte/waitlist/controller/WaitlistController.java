@@ -51,12 +51,16 @@ public class WaitlistController {
     }
 
     @PostMapping("/patients")
-    public Paciente createPatient(@RequestBody Paciente patient) {
+    public ResponseEntity<?> createPatient(@RequestBody Paciente patient) {
+        if (!isValidRut(patient.getRut())) {
+            return ResponseEntity.badRequest().body("Error: El RUT del paciente no es válido.");
+        }
         Long nextId = patientRepo.findAll().stream()
                 .mapToLong(Paciente::getIdPaciente)
                 .max().orElse(100L) + 1;
         patient.setIdPaciente(nextId);
-        return patientRepo.save(patient);
+        Paciente saved = patientRepo.save(patient);
+        return ResponseEntity.ok(saved);
     }
 
     @GetMapping("/doctors")
@@ -65,13 +69,17 @@ public class WaitlistController {
     }
 
     @PostMapping("/doctors")
-    public ProfesionalSalud createDoctor(@RequestBody ProfesionalSalud doctor) {
+    public ResponseEntity<?> createDoctor(@RequestBody ProfesionalSalud doctor) {
+        if (!isValidRut(doctor.getRut())) {
+            return ResponseEntity.badRequest().body("Error: El RUT del médico no es válido.");
+        }
         Long nextId = doctorRepo.findAll().stream()
                 .mapToLong(ProfesionalSalud::getIdProfesional)
                 .max().orElse(200L) + 1;
         doctor.setIdProfesional(nextId);
         doctor.setDisponible(true);
-        return doctorRepo.save(doctor);
+        ProfesionalSalud saved = doctorRepo.save(doctor);
+        return ResponseEntity.ok(saved);
     }
 
     @GetMapping("/waitlist")
@@ -162,5 +170,45 @@ public class WaitlistController {
         result.put("patient", p);
         result.put("requests", requests);
         return ResponseEntity.ok(result);
+    }
+
+    private static boolean isValidRut(String rut) {
+        if (rut == null || rut.trim().isEmpty()) {
+            return false;
+        }
+        String cleanRut = rut.replace(".", "").replace("-", "").replace(" ", "").toUpperCase();
+        if (cleanRut.length() < 2) {
+            return false;
+        }
+        
+        String body = cleanRut.substring(0, cleanRut.length() - 1);
+        String dv = cleanRut.substring(cleanRut.length() - 1);
+        
+        if (!body.matches("\\d+")) {
+            return false;
+        }
+        
+        try {
+            int sum = 0;
+            int multiplier = 2;
+            for (int i = body.length() - 1; i >= 0; i--) {
+                sum += Character.getNumericValue(body.charAt(i)) * multiplier;
+                multiplier = (multiplier == 7) ? 2 : multiplier + 1;
+            }
+            
+            int expectedDvVal = 11 - (sum % 11);
+            String expectedDv;
+            if (expectedDvVal == 11) {
+                expectedDv = "0";
+            } else if (expectedDvVal == 10) {
+                expectedDv = "K";
+            } else {
+                expectedDv = String.valueOf(expectedDvVal);
+            }
+            
+            return expectedDv.equals(dv);
+        } catch (Exception e) {
+            return false;
+        }
     }
 }

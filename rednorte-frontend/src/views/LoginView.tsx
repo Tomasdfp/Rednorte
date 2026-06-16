@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { mockDoctors } from '../mockData';
 import { HeartHandshake, Shield, User, Key } from 'lucide-react';
+import { validateRut } from '../utils/validation';
 
 interface LoginViewProps {
   onLogin: (user: { role: 'patient' | 'doctor' | 'receptionist'; data: any }) => void;
@@ -38,6 +39,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
   const handlePatientSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!patientRut) return;
+
+    if (!validateRut(patientRut)) {
+      alert('RUT no válido. Por favor, ingrese un RUT chileno correcto (ej: 12.345.678-9).');
+      return;
+    }
 
     try {
       const res = await fetch(`http://localhost:8080/api/auth/login`, {
