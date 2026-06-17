@@ -1,0 +1,630 @@
+openapi: 3.0.3
+info:
+  title: RedNorte Clinical API (BFF)
+  description: API especificada para el sistema de gestión de listas de espera, asignación de citas y cancelaciones de RedNorte. Todos los endpoints (excepto login y stream de notificaciones) requieren autenticación por Bearer Token JWT.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080/api
+    description: Servidor BFF (Backend-For-Frontend) de Desarrollo
+
+security:
+  - BearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      summary: Autenticar usuario (Paciente, Médico o Recepcionista)
+      security: [] # No requiere token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - role
+              properties:
+                role:
+                  type: string
+                  enum: [patient, doctor, receptionist]
+                  example: patient
+                patientRut:
+                  type: string
+                  description: Requerido si el rol es 'patient' (Valida RUT chileno)
+                  example: "12.345.678-9"
+                doctorId:
+                  type: string
+                  description: Requerido si el rol es 'doctor'
+                  example: "201"
+                adminUser:
+                  type: string
+                  description: Requerido si el rol es 'receptionist'
+                  example: "recep"
+                adminPass:
+                  type: string
+                  description: Requerido si el rol es 'receptionist'
+                  example: "recep123"
+      responses:
+        '200':
+          description: Login exitoso, retorna JWT y datos del usuario
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiJ9..."
+                  role:
+                    type: string
+                    example: patient
+                  data:
+                    type: object
+                    description: Datos específicos de la entidad autenticada
+        '401':
+          description: Credenciales incorrectas o usuario no registrado
+        '400':
+          description: Rol no válido
+
+  /notifications/stream:
+    get:
+      summary: Suscribirse al stream de notificaciones SSE en tiempo real
+      security: [] # No requiere token (se asocia por query param opcional para pacientes)
+      parameters:
+        - name: token
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Token JWT opcional para asociar la conexión al paciente
+      responses:
+        '200':
+          description: Conexión establecida
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: "event:CONNECT\ndata:Connected successfully to RedNorte Real-Time Stream"
+
+  /notifications/notify:
+    post:
+      summary: Enviar una notificación al canal SSE (Administrativo)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - type
+                - message
+              properties:
+                type:
+                  type: string
+                  enum: [ARRIVED, REASSIGNED, CANCELLED, APPOINTMENTS_RESET]
+                  example: ARRIVED
+                message:
+                  type: string
+                  example: "¡Paciente ha llegado a recepción!"
+                details:
+                  type: object
+                  description: Metadatos adicionales de la notificación
+      responses:
+        '200':
+          description: Notificación transmitida exitosamente
+
+  /patients:
+    get:
+      summary: Obtener lista completa de pacientes
+      responses:
+        '200':
+          description: Listado de pacientes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Paciente'
+    post:
+      summary: Registrar un nuevo paciente
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Paciente'
+      responses:
+        '200':
+          description: Paciente guardado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Paciente'
+        '400':
+          description: RUT inválido o datos incorrectos
+
+  /patients/rut/{rut}:
+    get:
+      summary: Obtener paciente por RUT chileno
+      parameters:
+        - name: rut
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "12.345.678-9"
+      responses:
+        '200':
+          description: Datos del paciente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Paciente'
+        '404':
+          description: Paciente no encontrado
+
+  /doctors:
+    get:
+      summary: Obtener lista completa de médicos
+      responses:
+        '200':
+          description: Listado de médicos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProfesionalSalud'
+    post:
+      summary: Registrar un nuevo médico
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfesionalSalud'
+      responses:
+        '200':
+          description: Médico guardado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfesionalSalud'
+        '400':
+          description: RUT inválido o datos incorrectos
+
+  /waitlist:
+    get:
+      summary: Obtener la lista de espera ordenada por prioridad y fecha
+      responses:
+        '200':
+          description: Lista de espera ordenada
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SolicitudListaEspera'
+    post:
+      summary: Registrar una solicitud de ingreso a lista de espera
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudListaEsperaInput'
+      responses:
+        '200':
+          description: Ingresado con prioridad calculada automáticamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudListaEspera'
+        '400':
+          description: Paciente no encontrado o datos inválidos
+
+  /waitlist/{id}/status:
+    put:
+      summary: Actualizar estado de una solicitud de la lista de espera
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+        - name: status
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [PENDIENTE, ASIGNADA, ATENDIDO, EXSPIRADO]
+          example: ASIGNADA
+      responses:
+        '200':
+          description: Estado actualizado con éxito
+
+  /appointments:
+    get:
+      summary: Obtener lista completa de citas médicas agendadas
+      responses:
+        '200':
+          description: Listado de citas médicas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Cita'
+
+  /appointments/request:
+    post:
+      summary: Solicitar reserva de cita. Si el médico no está disponible, se deriva automáticamente a la lista de espera
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CitaInput'
+      responses:
+        '200':
+          description: Resultado de la operación
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ASSIGNED, WAITLIST]
+                    example: ASSIGNED
+                  data:
+                    type: object
+                    description: Contiene el objeto Cita creada (si ASSIGNED) o SolicitudListaEspera creada (si WAITLIST)
+
+  /appointments/check-in/{id}:
+    post:
+      summary: Confirmar la llegada del paciente a recepción en un módulo de autotoma / recepción
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 301
+      responses:
+        '200':
+          description: Cita actualizada a estado 'PRESENTE'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cita'
+        '404':
+          description: Cita no encontrada
+
+  /appointments/cancel/{id}:
+    post:
+      summary: Cancelar una cita médica. Desencadena la reasignación automática de la vacante al paciente de mayor prioridad en la lista de espera
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 301
+        - name: reason
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "Incompatibilidad horaria laboral"
+        - name: specialty
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "Cardiología"
+      responses:
+        '200':
+          description: Cita cancelada. Si aplica, se retorna la cita cancelada y se genera internamente la reasignación automática, auditoría y alertas (SMS/Email)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cita'
+        '404':
+          description: Cita no encontrada
+
+  /reassignments:
+    get:
+      summary: Consultar los registros de transacciones de reasignación automática
+      responses:
+        '200':
+          description: Historial de reasignaciones automáticas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReasignacionLog'
+
+  /timeline/{rut}:
+    get:
+      summary: Obtener el historial clínico consolidado (Ficha del paciente, lista de espera, citas y notificaciones)
+      parameters:
+        - name: rut
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "12.345.678-9"
+      responses:
+        '200':
+          description: Historial consolidado exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  patient:
+                    $ref: '#/components/schemas/Paciente'
+                  requests:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SolicitudListaEspera'
+                  appointments:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Cita'
+                  notifications:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NotificationAudit'
+        '404':
+          description: Paciente no registrado en el sistema
+
+  /reset:
+    post:
+      summary: Reiniciar todos los datos de pacientes, médicos, citas, lista de espera y auditorías (Uso académico/pruebas)
+      responses:
+        '200':
+          description: Bases de datos reiniciadas a su estado semilla inicial
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Paciente:
+      type: object
+      properties:
+        idPaciente:
+          type: integer
+          example: 101
+        rut:
+          type: string
+          example: "12.345.678-9"
+        nombreCompleto:
+          type: string
+          example: "Alejandra Reyes Castro"
+        fechaNacimiento:
+          type: string
+          format: date
+          example: "1965-04-12"
+        telefono:
+          type: string
+          example: "+56 9 8765 4321"
+        email:
+          type: string
+          format: email
+          example: "alejandra.reyes@email.cl"
+        direccion:
+          type: string
+          example: "Av. Providencia 1204, Santiago"
+        prevision:
+          type: string
+          example: "FONASA"
+
+    ProfesionalSalud:
+      type: object
+      properties:
+        idProfesional:
+          type: integer
+          example: 201
+        rut:
+          type: string
+          example: "11.111.111-1"
+        nombreCompleto:
+          type: string
+          example: "Dra. Karen Fuentealba Andrade"
+        especialidad:
+          type: string
+          example: "Cardiología"
+        registroNacional:
+          type: string
+          example: "34891-C"
+        horarioAtencion:
+          type: string
+          example: "Lunes a Viernes 09:00 - 13:00"
+        disponible:
+          type: boolean
+          example: true
+
+    SolicitudListaEspera:
+      type: object
+      properties:
+        idSolicitud:
+          type: integer
+          example: 1
+        idPaciente:
+          type: integer
+          example: 103
+        fechaSolicitud:
+          type: string
+          format: date
+          example: "2026-04-10"
+        nivelGravedad:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 4
+        especialidadRequerida:
+          type: string
+          example: "Cardiología"
+        diagnosticoPreliminar:
+          type: string
+          example: "Insuficiencia cardíaca congestiva descompensada"
+        estado:
+          type: string
+          enum: [PENDIENTE, ASIGNADA, ATENDIDO, EXSPIRADO]
+          example: PENDIENTE
+        prioridadCalculada:
+          type: integer
+          description: Calculado como nivelGravedad * 15 + bono por edad (Mayor de 60 años = +20, Menor de 5 años = +10)
+          example: 85
+        comentariosMedicos:
+          type: string
+          example: "Paciente prioritario por edad y severidad de síntomas. Requiere control urgente."
+
+    SolicitudListaEsperaInput:
+      type: object
+      required:
+        - idPaciente
+        - nivelGravedad
+        - especialidadRequerida
+      properties:
+        idPaciente:
+          type: integer
+          example: 103
+        nivelGravedad:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 4
+        especialidadRequerida:
+          type: string
+          example: "Cardiología"
+        diagnosticoPreliminar:
+          type: string
+          example: "Insuficiencia cardíaca congestiva descompensada"
+        comentariosMedicos:
+          type: string
+          example: "Paciente prioritario por edad y severidad."
+
+    Cita:
+      type: object
+      properties:
+        idCita:
+          type: integer
+          example: 301
+        idPaciente:
+          type: integer
+          example: 102
+        idProfesional:
+          type: integer
+          example: 201
+        fechaHoraProgramada:
+          type: string
+          example: "2026-05-25T10:00:00"
+        duracionEstimada:
+          type: integer
+          description: Duración estimada en minutos
+          example: 30
+        estadoCita:
+          type: string
+          enum: [PROGRAMADA, CONFIRMADA, PRESENTE, CANCELADA]
+          example: PROGRAMADA
+        motivoCancelacion:
+          type: string
+          nullable: true
+          example: null
+        observaciones:
+          type: string
+          example: "Electrocardiograma de esfuerzo anual."
+
+    CitaInput:
+      type: object
+      required:
+        - idPaciente
+        - idProfesional
+        - fechaHoraProgramada
+        - duracionEstimada
+      properties:
+        idPaciente:
+          type: integer
+          example: 102
+        idProfesional:
+          type: integer
+          example: 201
+        fechaHoraProgramada:
+          type: string
+          example: "2026-05-25T10:00:00"
+        duracionEstimada:
+          type: integer
+          example: 30
+        observaciones:
+          type: string
+          example: "Control rutinario"
+
+    ReasignacionLog:
+      type: object
+      properties:
+        idLog:
+          type: integer
+          example: 1
+        fechaEvento:
+          type: string
+          example: "2026-06-17T02:20:00"
+        citaOriginal:
+          type: integer
+          example: 301
+        citaReasignada:
+          type: integer
+          example: 304
+        nombrePacienteOriginal:
+          type: string
+          example: "Diego Muñoz Valenzuela"
+        nombrePacienteReasignado:
+          type: string
+          example: "Carlos Mendoza Silva"
+        especialidad:
+          type: string
+          example: "Cardiología"
+        motivo:
+          type: string
+          example: "Paciente canceló cita programada"
+        algoritmoUsado:
+          type: string
+          example: "Priority-Severity Matrix"
+        tiempoProcesamiento:
+          type: integer
+          description: Tiempo de cálculo en milisegundos
+          example: 85
+
+    NotificationAudit:
+      type: object
+      properties:
+        idNotification:
+          type: integer
+          example: 1
+        idPaciente:
+          type: integer
+          example: 103
+        nombrePaciente:
+          type: string
+          example: "Carlos Mendoza Silva"
+        tipoCanal:
+          type: string
+          enum: [SMS, EMAIL]
+          example: SMS
+        destinatario:
+          type: string
+          example: "+56965432109"
+        mensaje:
+          type: string
+          example: "Estimado(a) Carlos Mendoza Silva, se le ha asignado una hora en Cardiología..."
+        fechaEnvio:
+          type: string
+          example: "2026-06-17T02:20:00"
