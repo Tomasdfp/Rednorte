@@ -165,6 +165,28 @@ class WaitingListServiceApplicationTests {
     }
 
     @Test
+    void testUpdateExistingPatient() throws Exception {
+        // Save initial patient
+        Paciente patient = new Paciente(401L, "12.345.678-9", "Alejandra Reyes Castro", "1965-04-12", "+56 9 8765 4321", "alejandra.reyes@email.cl", "Address", "FONASA");
+        patientRepo.save(patient);
+
+        // Update details (same RUT, different phone)
+        Paciente update = new Paciente(null, "12.345.678-9", "Alejandra Reyes Castro", "1965-04-12", "+56 9 9999 9999", "alejandra.reyes@email.cl", "Address", "FONASA");
+        
+        mockMvc.perform(post("/api/patients")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(update)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.idPaciente").value(401L))
+                .andExpect(jsonPath("$.telefono").value("+56 9 9999 9999"));
+
+        // Verify in DB that size is still 1 (not duplicated)
+        Optional<Paciente> dbPatient = patientRepo.findById(401L);
+        assertThat(dbPatient).isPresent();
+        assertThat(dbPatient.get().getTelefono()).isEqualTo("+56 9 9999 9999");
+    }
+
+    @Test
     void testGetAllDoctors() throws Exception {
         mockMvc.perform(get("/api/doctors"))
                 .andExpect(status().isOk())
@@ -186,6 +208,28 @@ class WaitingListServiceApplicationTests {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(invalidDoc)))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void testUpdateExistingDoctor() throws Exception {
+        // Save initial doctor
+        ProfesionalSalud doc = new ProfesionalSalud(501L, "11.111.111-1", "Dra. Karen Fuentealba Andrade", "Cardiología", "34891-C", "Lunes a Viernes 09:00 - 13:00", true);
+        doctorRepo.save(doc);
+
+        // Update details (same RUT, different hours)
+        ProfesionalSalud update = new ProfesionalSalud(null, "11.111.111-1", "Dra. Karen Fuentealba Andrade", "Cardiología", "34891-C", "Lunes a Viernes 10:00 - 18:00", true);
+        
+        mockMvc.perform(post("/api/doctors")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(update)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.idProfesional").value(501L))
+                .andExpect(jsonPath("$.horarioAtencion").value("Lunes a Viernes 10:00 - 18:00"));
+
+        // Verify in DB that size is still 1 (not duplicated)
+        Optional<ProfesionalSalud> dbDoc = doctorRepo.findById(501L);
+        assertThat(dbDoc).isPresent();
+        assertThat(dbDoc.get().getHorarioAtencion()).isEqualTo("Lunes a Viernes 10:00 - 18:00");
     }
 
     @Test

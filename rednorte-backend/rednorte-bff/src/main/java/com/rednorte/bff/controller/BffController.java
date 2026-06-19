@@ -14,12 +14,13 @@ import java.util.concurrent.CopyOnWriteArrayList;
 @CrossOrigin(origins = "*")
 public class BffController {
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
     private final JwtUtil jwtUtil;
 
-    public BffController(JwtUtil jwtUtil) {
+    public BffController(JwtUtil jwtUtil, RestTemplate restTemplate) {
         this.jwtUtil = jwtUtil;
+        this.restTemplate = restTemplate;
     }
 
     @PostMapping("/auth/login")

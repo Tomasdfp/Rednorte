@@ -55,6 +55,27 @@ public class WaitlistController {
         if (!isValidRut(patient.getRut())) {
             return ResponseEntity.badRequest().body("Error: El RUT del paciente no es válido.");
         }
+        
+        Optional<Paciente> existing = Optional.empty();
+        if (patient.getIdPaciente() != null) {
+            existing = patientRepo.findById(patient.getIdPaciente());
+        }
+        if (existing.isEmpty() && patient.getRut() != null) {
+            existing = patientRepo.findByRut(patient.getRut());
+        }
+
+        if (existing.isPresent()) {
+            Paciente existingPatient = existing.get();
+            existingPatient.setNombreCompleto(patient.getNombreCompleto());
+            existingPatient.setFechaNacimiento(patient.getFechaNacimiento());
+            existingPatient.setTelefono(patient.getTelefono());
+            existingPatient.setEmail(patient.getEmail());
+            existingPatient.setDireccion(patient.getDireccion());
+            existingPatient.setPrevision(patient.getPrevision());
+            Paciente saved = patientRepo.save(existingPatient);
+            return ResponseEntity.ok(saved);
+        }
+
         Long nextId = patientRepo.findAll().stream()
                 .mapToLong(Paciente::getIdPaciente)
                 .max().orElse(100L) + 1;
@@ -73,6 +94,26 @@ public class WaitlistController {
         if (!isValidRut(doctor.getRut())) {
             return ResponseEntity.badRequest().body("Error: El RUT del médico no es válido.");
         }
+        
+        Optional<ProfesionalSalud> existing = Optional.empty();
+        if (doctor.getIdProfesional() != null) {
+            existing = doctorRepo.findById(doctor.getIdProfesional());
+        }
+        if (existing.isEmpty() && doctor.getRut() != null) {
+            existing = doctorRepo.findByRut(doctor.getRut());
+        }
+
+        if (existing.isPresent()) {
+            ProfesionalSalud existingDoc = existing.get();
+            existingDoc.setNombreCompleto(doctor.getNombreCompleto());
+            existingDoc.setEspecialidad(doctor.getEspecialidad());
+            existingDoc.setRegistroNacional(doctor.getRegistroNacional());
+            existingDoc.setHorarioAtencion(doctor.getHorarioAtencion());
+            existingDoc.setDisponible(doctor.isDisponible());
+            ProfesionalSalud saved = doctorRepo.save(existingDoc);
+            return ResponseEntity.ok(saved);
+        }
+
         Long nextId = doctorRepo.findAll().stream()
                 .mapToLong(ProfesionalSalud::getIdProfesional)
                 .max().orElse(200L) + 1;

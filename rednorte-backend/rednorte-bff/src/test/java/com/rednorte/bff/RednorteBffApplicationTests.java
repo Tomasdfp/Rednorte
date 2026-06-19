@@ -36,6 +36,9 @@ class RednorteBffApplicationTests {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @MockBean
+    private RestTemplate restTemplate;
+
     @Test
     void contextLoads() {
         assertThat(controller).isNotNull();
@@ -213,5 +216,94 @@ class RednorteBffApplicationTests {
                 .param("status", "PENDIENTE")
                 .header("Authorization", "Bearer " + token))
                 .andExpect(status().isInternalServerError());
+    }
+
+    @Test
+    void testProxyGetPatientsSuccess() throws Exception {
+        String token = jwtUtil.generateToken("recep", "ROLE_RECEPTIONIST");
+
+        Mockito.when(restTemplate.getForEntity(
+                Mockito.contains("/patients"), 
+                Mockito.eq(Object.class)
+        )).thenReturn(new ResponseEntity<>(List.of(Map.of("idPaciente", 101L)), HttpStatus.OK));
+
+        mockMvc.perform(get("/api/patients")
+                .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].idPaciente").value(101L));
+    }
+
+    @Test
+    void testProxyPostPatientsSuccess() throws Exception {
+        String token = jwtUtil.generateToken("recep", "ROLE_RECEPTIONIST");
+        Map<String, Object> body = Map.of("rut", "12.345.678-9", "nombreCompleto", "Test Patient");
+
+        Mockito.when(restTemplate.postForEntity(
+                Mockito.contains("/patients"), 
+                Mockito.any(),
+                Mockito.eq(Object.class)
+        )).thenReturn(new ResponseEntity<>(Map.of("idPaciente", 101L), HttpStatus.OK));
+
+        mockMvc.perform(post("/api/patients")
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.idPaciente").value(101L));
+    }
+
+    @Test
+    void testProxyLoginPatientSuccess() throws Exception {
+        Map<String, String> credentials = new HashMap<>();
+        credentials.put("role", "patient");
+        credentials.put("patientRut", "8.123.456-k");
+
+        // Mock RestTemplate response for check patient
+        Mockito.when(restTemplate.getForEntity(
+                Mockito.contains("/patients/rut/8.123.456-k"),
+                Mockito.eq(Map.class)
+        )).thenReturn(new ResponseEntity<>(Map.of("idPaciente", 103L, "rut", "8.123.456-k"), HttpStatus.OK));
+
+        mockMvc.perform(post("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(credentials)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("patient"))
+                .andExpect(jsonPath("$.token").exists())
+                .andExpect(jsonPath("$.data.idPaciente").value(103L));
+    }
+
+    @Test
+    void testGetPatientTimelineSuccess() throws Exception {
+        String token = jwtUtil.generateToken("8.123.456-k", "ROLE_PATIENT");
+
+        // Mock Waitlist timeline call
+        Map<String, Object> mockWaitlistResponse = new HashMap<>();
+        mockWaitlistResponse.put("patient", Map.of("idPaciente", 103L, "nombreCompleto", "Carlos Mendoza"));
+        mockWaitlistResponse.put("requests", List.of(Map.of("idSolicitud", 1L)));
+        Mockito.when(restTemplate.getForEntity(
+                Mockito.contains("/patients/timeline/8.123.456-k"),
+                Mockito.eq(Map.class)
+        )).thenReturn(new ResponseEntity<>(mockWaitlistResponse, HttpStatus.OK));
+
+        // Mock Cancellation appointments call
+        Mockito.when(restTemplate.getForObject(
+                Mockito.contains("/appointments/patient/103"),
+                Mockito.eq(List.class)
+        )).thenReturn(List.of(Map.of("idCita", 301L)));
+
+        // Mock Cancellation notifications call
+        Mockito.when(restTemplate.getForObject(
+                Mockito.contains("/notifications/patient/103"),
+                Mockito.eq(List.class)
+        )).thenReturn(List.of(Map.of("idNotification", 5L)));
+
+        mockMvc.perform(get("/api/timeline/8.123.456-k")
+                .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.patient.nombreCompleto").value("Carlos Mendoza"))
+                .andExpect(jsonPath("$.requests[0].idSolicitud").value(1L))
+                .andExpect(jsonPath("$.appointments[0].idCita").value(301L))
+                .andExpect(jsonPath("$.notifications[0].idNotification").value(5L));
     }
 }

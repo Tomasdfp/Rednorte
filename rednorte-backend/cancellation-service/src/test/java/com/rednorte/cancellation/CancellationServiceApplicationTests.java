@@ -46,6 +46,9 @@ class CancellationServiceApplicationTests {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @MockBean
+    private RestTemplate restTemplate;
+
     @Test
     void contextLoads() {
         assertThat(controller).isNotNull();
@@ -89,11 +92,20 @@ class CancellationServiceApplicationTests {
     @Test
     void testRequestAppointmentDoctorBooked() throws Exception {
         Cita newCita = new Cita(null, 105L, 203L, "2026-06-20T10:00:00", 30, "PROGRAMADA", "New request");
-        // Doctor 203 is already booked. Waitlist service is offline in tests, so it returns 500
+        
+        // Mock the Waitlist service POST call
+        Mockito.when(restTemplate.postForEntity(
+                Mockito.contains("/waitlist"), 
+                Mockito.any(), 
+                Mockito.eq(Map.class)
+        )).thenReturn(ResponseEntity.ok(Map.of("idSolicitud", 999L, "prioridadCalculada", 45)));
+
         mockMvc.perform(post("/api/appointments/request")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(newCita)))
-                .andExpect(status().isInternalServerError());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("WAITLIST"))
+                .andExpect(jsonPath("$.data.idSolicitud").value(999L));
     }
 
 
@@ -104,7 +116,13 @@ class CancellationServiceApplicationTests {
         Cita cita = appointmentRepo.findById(301L).orElseThrow();
         assertThat(cita.getEstadoCita()).isEqualTo("PROGRAMADA");
 
-        // Perform check-in (Waitlist & BFF offline, but handled gracefully)
+        // Mock patient name fetch
+        Mockito.when(restTemplate.getForObject(
+                Mockito.contains("/patients/102"), 
+                Mockito.eq(Map.class)
+        )).thenReturn(Map.of("nombreCompleto", "Diego Muñoz Valenzuela"));
+
+        // Perform check-in
         mockMvc.perform(post("/api/appointments/check-in/301")
                 .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
@@ -122,7 +140,36 @@ class CancellationServiceApplicationTests {
 
     @Test
     void testCancelAppointment() throws Exception {
-        // Cancel appointment 302 (Waitlist & BFF offline, will fall back to normal cancel flow)
+        // Mock patient original name fetch
+        Mockito.when(restTemplate.getForObject(
+                Mockito.contains("/patients/103"), 
+                Mockito.eq(Map.class)
+        )).thenReturn(Map.of("nombreCompleto", "Diego Muñoz Valenzuela"));
+
+        // Mock highest priority waitlist candidate
+        Map<String, Object> mockRequest = new HashMap<>();
+        mockRequest.put("idSolicitud", 501L);
+        mockRequest.put("idPaciente", 104L);
+        mockRequest.put("prioridadCalculada", 85);
+        Mockito.when(restTemplate.getForObject(
+                Mockito.contains("/waitlist/highest-priority?specialty=Traumatolog"), 
+                Mockito.eq(Map.class)
+        )).thenReturn(mockRequest);
+
+        // Mock waitlist candidate details
+        Mockito.when(restTemplate.getForObject(
+                Mockito.contains("/patients/104"), 
+                Mockito.eq(Map.class)
+        )).thenReturn(Map.of(
+                "nombreCompleto", "Carlos Mendoza Silva",
+                "telefono", "+56 9 6543 2109",
+                "email", "carlos.mendoza@email.cl"
+        ));
+
+        // Mock waitlist candidate status update to ASIGNADA
+        // restTemplate.put is void, Mockito handles it automatically
+
+        // Cancel appointment 302
         mockMvc.perform(post("/api/appointments/cancel/302")
                 .param("reason", "Patient cannot make it")
                 .param("specialty", "Traumatología"))
