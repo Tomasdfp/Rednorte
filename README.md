@@ -8,37 +8,39 @@ El proyecto está diseñado bajo una arquitectura distribuida de microservicios 
 
 ## 1. Arquitectura del Sistema
 
-La solución está dividida en componentes independientes e integrados mediante red:
+La solución está dividida en componentes independientes de red:
 
-*   **Frontend (React + Vite):** Portal del Paciente, Portal del Médico y Portal de Recepción/Check-in.
-*   **Backend for Frontend (BFF) (Puerto `8080`):** Centraliza la comunicación del frontend, expone el canal de transmisión de eventos en tiempo real (SSE) y consolida llamadas concurrentes a los microservicios.
-*   **Microservicio de Lista de Espera (Puerto `8081`):** Gestiona pacientes, personal de salud, solicitudes e implementa la regla de negocio de priorización.
-*   **Microservicio de Cancelación (Puerto `8082`):** Administra la agenda de citas, procesa check-ins, cancelaciones, ejecuta el algoritmo de reasignación y audita notificaciones.
+*   **Frontend (React + Vite + Tailwind CSS):** Interfaz para pacientes, médicos y personal administrativo.
+*   **Backend for Frontend (BFF) (Puerto `8080`):** Centraliza la comunicación del frontend, expone el canal de Server-Sent Events (SSE) y gestiona la seguridad perimetral JWT.
+*   **Microservicio de Lista de Espera (Puerto `8081`):** Mantiene pacientes, personal de salud, solicitudes y calcula las prioridades clínicas.
+*   **Microservicio de Cancelación (Puerto `8082`):** Administra la agenda de citas, procesa check-ins, cancelaciones, ejecuta el algoritmo de reasignación y registra alertas de comunicación.
 
 ```mermaid
 graph TD
-    Client[React Frontend - Puerto 5173/5174]
+    Client[React Frontend - Puerto 5173]
     BFF[Backend For Frontend - Puerto 8080]
     Waitlist[Waiting List Service - Puerto 8081]
     Cancel[Cancellation Service - Puerto 8082]
-    H2_1[(H2 DB Waitlist)]
-    H2_2[(H2 DB Cancellation)]
+    PG_1[(PostgreSQL - rednorte_waitlist)]
+    PG_2[(PostgreSQL - rednorte_cancellation)]
 
-    Client -->|API REST & SSE Stream| BFF
-    BFF -->|Proxy GET/POST| Waitlist
-    BFF -->|Proxy GET/POST| Cancel
-    Waitlist --> H2_1
-    Cancel --> H2_2
-    Cancel -->|Consulta Prioridad API| Waitlist
+    Client -->|API REST & SSE (JWT Auth)| BFF
+    BFF -->|REST Calls| Waitlist
+    BFF -->|REST Calls| Cancel
+    Waitlist --> PG_1
+    Cancel --> PG_2
+    Cancel -->|Consulta de Prioridades| Waitlist
 ```
 
 ---
 
-## 2. Patrones de Diseño Implementados
+## 2. Tecnologías y Patrones de Diseño Implementados
 
-1.  **Patrón Observer (Suscripción SSE):** Implementado en el Frontend ([ObserverContext.tsx](rednorte-frontend/src/observer/ObserverContext.tsx)) para reaccionar a los eventos en tiempo real distribuidos por el BFF.
-2.  **Patrón BFF / API Proxy:** Centraliza las rutas de la API en [BffController.java](rednorte-backend/rednorte-bff/src/main/java/com/rednorte/bff/controller/BffController.java) y agrega la información del paciente.
-3.  **Patrón Repository:** Desacopla la lógica de negocio del almacenamiento de datos usando Spring Data JPA (`JpaRepository`).
+*   **Seguridad JWT:** Spring Security y filtros de autenticación stateless (`JwtFilter`) en el BFF. Las conexiones SSE se autorizan mediante token como parámetro de consulta.
+*   **Patrón Observer (Suscripción SSE):** Implementado en el Frontend ([ObserverContext.tsx](rednorte-frontend/src/observer/ObserverContext.tsx)) para reflejar actualizaciones en tiempo real en los paneles.
+*   **Patrón BFF / API Proxy:** Centraliza las rutas en [BffController.java](rednorte-backend/rednorte-bff/src/main/java/com/rednorte/bff/controller/BffController.java).
+*   **Persistencia JPA / Hibernate:** Mapeo relacional estructurado.
+*   **Motores de Base de Datos:** PostgreSQL para persistencia por defecto, y base de datos H2 en memoria aislada para tests automáticos.
 
 ---
 
@@ -47,14 +49,22 @@ graph TD
 Para ejecutar la solución en local de manera integrada, asegúrate de contar con:
 *   **Java JDK 17 o superior** (Java 21 recomendado).
 *   **Node.js LTS** (v18 o superior).
+*   **PostgreSQL instalado y corriendo** en el puerto `5432` con la contraseña de administrador configurada.
 
 ---
 
 ## 4. Guía de Ejecución Local (Paso a Paso)
 
-Abre terminales independientes para cada componente y sigue el siguiente orden:
+### Paso 1: Configurar PostgreSQL
+Asegúrate de crear las dos bases de datos requeridas en tu instancia local de PostgreSQL:
+1.  `rednorte_waitlist`
+2.  `rednorte_cancellation`
 
-### Paso 1: Levantar los Microservicios de Backend
+*Nota: Por defecto, el sistema intentará conectarse utilizando el usuario `postgres` y la contraseña `214683`. Si deseas modificar estas credenciales, puedes configurar las variables de entorno `DB_USERNAME` y `DB_PASSWORD`.*
+
+### Paso 2: Levantar los Componentes de Backend
+
+Abre terminales independientes para cada componente y ejecuta el orden correspondiente:
 
 #### A. Iniciar el Servicio de Lista de Espera (Puerto `8081`)
 ```bash
@@ -74,24 +84,31 @@ cd rednorte-backend/rednorte-bff
 ./mvnw.cmd spring-boot:run
 ```
 
-### Paso 2: Levantar el Frontend React
+### Paso 3: Levantar el Frontend React
 ```bash
 cd rednorte-frontend
 npm install
 npm run dev
 ```
 
-Navega a la URL proporcionada en la consola (por lo general, `http://localhost:5173` o `http://localhost:5174`).
+Navega a la URL indicada (por defecto, `http://localhost:5173`).
 
 ---
 
-## 5. Pruebas Automatizadas
-Para verificar el correcto funcionamiento y cálculo de las prioridades clínicas en base a la edad y severidad, ejecuta el siguiente comando en cualquiera de los microservicios de backend:
+## 5. Pruebas Automatizadas y Cobertura (JaCoCo)
+
+Para correr la suite de pruebas unitarias y de integración del backend y verificar la lógica de priorización y reasignación en una base de datos aislada H2 en memoria, ejecute el siguiente comando en la carpeta de cualquier microservicio:
 ```bash
-./mvnw.cmd test
+./mvnw.cmd clean test
 ```
+Este comando generará el reporte de cobertura de código de JaCoCo en formato HTML en:
+`[directorio-microservicio]/target/site/jacoco/index.html`
 
 ---
 
-## 6. Persistencia Temporal
-Por defecto, el backend está configurado para utilizar base de datos **H2 en memoria** (`jdbc:h2:mem:...`). No es necesario instalar ningún motor de base de datos en el equipo. Los datos se inicializan automáticamente con registros de prueba al arrancar los servicios (`DataLoader.java`).
+## 6. Documentación Adicional del Entregable
+Encuentra los detalles exigidos por la rúbrica de la **EP3** en la raíz del proyecto:
+*   **[PERSISTENCIA.md](PERSISTENCIA.md):** Explicación del modelo relacional PostgreSQL/H2, diagramas de bases de datos y aislamiento.
+*   **[PRUEBAS.md](PRUEBAS.md):** Resumen de la suite de testing, reportes de JaCoCo (>60% de cobertura) y comandos.
+*   **[REPOSITORIOS.md](REPOSITORIOS.md):** Enlaces oficiales y flujo de GitFlow.
+*   **[openapi.yaml](openapi.yaml):** Especificación Swagger / OpenAPI de los endpoints y payloads expuestos.

@@ -14,12 +14,13 @@ import java.util.concurrent.CopyOnWriteArrayList;
 @CrossOrigin(origins = "*")
 public class BffController {
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
     private final JwtUtil jwtUtil;
 
-    public BffController(JwtUtil jwtUtil) {
+    public BffController(JwtUtil jwtUtil, RestTemplate restTemplate) {
         this.jwtUtil = jwtUtil;
+        this.restTemplate = restTemplate;
     }
 
     @PostMapping("/auth/login")
@@ -167,8 +168,12 @@ public class BffController {
 
     @PutMapping("/waitlist/{id}/status")
     public ResponseEntity<?> updateWaitlistStatus(@PathVariable Long id, @RequestParam String status) {
-        restTemplate.put(WAITLIST_SERVICE_URL + "/waitlist/" + id + "/status?status=" + status, null);
-        return ResponseEntity.ok().build();
+        try {
+            restTemplate.put(WAITLIST_SERVICE_URL + "/waitlist/" + id + "/status?status=" + status, null);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Proxy error PUT: " + e.getMessage());
+        }
     }
 
     @GetMapping("/appointments")

@@ -25,7 +25,7 @@ public class CancellationController {
     private final CitaRepository appointmentRepo;
     private final ReasignacionLogRepository logRepo;
     private final NotificationAuditRepository auditRepo;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
 
     private static final String WAITLIST_URL = System.getenv("WAITLIST_SERVICE_URL") != null 
             ? System.getenv("WAITLIST_SERVICE_URL") 
@@ -34,10 +34,11 @@ public class CancellationController {
             ? System.getenv("BFF_SERVICE_URL") 
             : "http://localhost:8080/api";
 
-    public CancellationController(CitaRepository appointmentRepo, ReasignacionLogRepository logRepo, NotificationAuditRepository auditRepo) {
+    public CancellationController(CitaRepository appointmentRepo, ReasignacionLogRepository logRepo, NotificationAuditRepository auditRepo, RestTemplate restTemplate) {
         this.appointmentRepo = appointmentRepo;
         this.logRepo = logRepo;
         this.auditRepo = auditRepo;
+        this.restTemplate = restTemplate;
     }
 
     @GetMapping("/appointments")
