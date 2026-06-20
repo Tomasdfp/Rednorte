@@ -167,11 +167,11 @@ class WaitingListServiceApplicationTests {
     @Test
     void testUpdateExistingPatient() throws Exception {
         // Save initial patient
-        Paciente patient = new Paciente(401L, "12.345.678-9", "Alejandra Reyes Castro", "1965-04-12", "+56 9 8765 4321", "alejandra.reyes@email.cl", "Address", "FONASA");
+        Paciente patient = new Paciente(401L, "16.342.185-2", "Alejandra Reyes Castro", "1965-04-12", "+56 9 8765 4321", "alejandra.reyes@email.cl", "Address", "FONASA");
         patientRepo.save(patient);
 
         // Update details (same RUT, different phone)
-        Paciente update = new Paciente(null, "12.345.678-9", "Alejandra Reyes Castro", "1965-04-12", "+56 9 9999 9999", "alejandra.reyes@email.cl", "Address", "FONASA");
+        Paciente update = new Paciente(null, "16.342.185-2", "Alejandra Reyes Castro", "1965-04-12", "+56 9 9999 9999", "alejandra.reyes@email.cl", "Address", "FONASA");
         
         mockMvc.perform(post("/api/patients")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -213,11 +213,11 @@ class WaitingListServiceApplicationTests {
     @Test
     void testUpdateExistingDoctor() throws Exception {
         // Save initial doctor
-        ProfesionalSalud doc = new ProfesionalSalud(501L, "11.111.111-1", "Dra. Karen Fuentealba Andrade", "Cardiología", "34891-C", "Lunes a Viernes 09:00 - 13:00", true);
+        ProfesionalSalud doc = new ProfesionalSalud(501L, "15.342.195-1", "Dra. Karen Fuentealba Andrade", "Cardiología", "34891-C", "Lunes a Viernes 09:00 - 13:00", true);
         doctorRepo.save(doc);
 
         // Update details (same RUT, different hours)
-        ProfesionalSalud update = new ProfesionalSalud(null, "11.111.111-1", "Dra. Karen Fuentealba Andrade", "Cardiología", "34891-C", "Lunes a Viernes 10:00 - 18:00", true);
+        ProfesionalSalud update = new ProfesionalSalud(null, "15.342.195-1", "Dra. Karen Fuentealba Andrade", "Cardiología", "34891-C", "Lunes a Viernes 10:00 - 18:00", true);
         
         mockMvc.perform(post("/api/doctors")
                 .contentType(MediaType.APPLICATION_JSON)

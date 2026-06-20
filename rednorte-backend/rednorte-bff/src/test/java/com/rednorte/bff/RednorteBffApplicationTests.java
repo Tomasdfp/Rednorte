@@ -10,9 +10,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
+import org.mockito.Mockito;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -183,6 +188,10 @@ class RednorteBffApplicationTests {
     void testProxyPostAndPutEndpoints() throws Exception {
         String token = jwtUtil.generateToken("recep", "ROLE_RECEPTIONIST");
         Map<String, Object> body = new HashMap<>();
+
+        // Force RestTemplate.put to throw an exception to test the 500 error mapping path
+        Mockito.doThrow(new org.springframework.web.client.RestClientException("Connection refused"))
+                .when(restTemplate).put(Mockito.anyString(), Mockito.any());
 
         mockMvc.perform(post("/api/patients")
                 .header("Authorization", "Bearer " + token)

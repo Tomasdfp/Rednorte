@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useWaitingList, useAppointments } from '../observer/ObserverContext';
 import { mockDoctors, mockPatients, mockMedicalAttentions } from '../mockData';
 import type { Paciente, SolicitudListaEspera, ProfesionalSalud } from '../mockData';
@@ -10,6 +10,39 @@ export const ReceptionistPortalView: React.FC = () => {
   
   const { requests, addRequest, updateRequestStatus } = useWaitingList();
   const { appointments, cancelAppointment, markPatientArrival } = useAppointments();
+
+  // Local state for patients and doctors loaded from backend
+  const [patients, setPatients] = useState<Paciente[]>(mockPatients);
+  const [doctors, setDoctors] = useState<ProfesionalSalud[]>(mockDoctors);
+
+  const fetchWithAuth = (url: string, options: RequestInit = {}) => {
+    const token = localStorage.getItem("token");
+    const headers = new Headers(options.headers || {});
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    return fetch(url, { ...options, headers });
+  };
+
+  const loadBackendData = () => {
+    fetchWithAuth('http://localhost:8080/api/patients')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setPatients(data);
+      })
+      .catch(err => console.error("Error fetching patients:", err));
+
+    fetchWithAuth('http://localhost:8080/api/doctors')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setDoctors(data);
+      })
+      .catch(err => console.error("Error fetching doctors:", err));
+  };
+
+  useEffect(() => {
+    loadBackendData();
+  }, [requests, appointments]);
 
   // Search tab state
   const [searchRut, setSearchRut] = useState('');
@@ -48,32 +81,32 @@ export const ReceptionistPortalView: React.FC = () => {
   const [wlFilterSpecialty, setWlFilterSpecialty] = useState('Todas');
   const [wlFilterStatus, setWlFilterStatus] = useState('Todas');
 
-  const [, setRefresh] = useState(0);
+
 
   // Helper getters
   const getPatientName = (idPaciente: number) => {
-    const p = mockPatients.find(x => x.idPaciente === idPaciente);
+    const p = patients.find(x => x.idPaciente === idPaciente);
     return p ? p.nombreCompleto : `Paciente #${idPaciente}`;
   };
 
   const getPatientRut = (idPaciente: number) => {
-    const p = mockPatients.find(x => x.idPaciente === idPaciente);
+    const p = patients.find(x => x.idPaciente === idPaciente);
     return p ? p.rut : '-';
   };
 
   const getDoctorName = (idDoctor: number) => {
-    const d = mockDoctors.find(x => x.idProfesional === idDoctor);
+    const d = doctors.find(x => x.idProfesional === idDoctor);
     return d ? d.nombreCompleto : `Médico #${idDoctor}`;
   };
 
   const getDoctorSpecialty = (idDoctor: number) => {
-    const d = mockDoctors.find(x => x.idProfesional === idDoctor);
+    const d = doctors.find(x => x.idProfesional === idDoctor);
     return d ? d.especialidad : 'General';
   };
 
   // Check-In handler
   const handleMarkArrival = (idCita: number) => {
-    markPatientArrival(idCita, mockPatients);
+    markPatientArrival(idCita, patients);
     alert('Paciente marcado como PRESENTE. El médico ha sido notificado en su portal.');
   };
 
@@ -86,7 +119,7 @@ export const ReceptionistPortalView: React.FC = () => {
       return;
     }
     const specialty = getDoctorSpecialty(doctorId);
-    cancelAppointment(idCita, reason, mockPatients, specialty);
+    cancelAppointment(idCita, reason, patients, specialty);
     alert('Cita cancelada. Cupo reasignado al paciente con mayor prioridad.');
   };
 
@@ -95,20 +128,20 @@ export const ReceptionistPortalView: React.FC = () => {
     e.preventDefault();
     if (!searchRut) return;
 
-    const patient = mockPatients.find(
+    const patient = patients.find(
       p => p.rut.trim().replace(/\s/g, '') === searchRut.trim().replace(/\s/g, '')
     );
 
     if (patient) {
       setSearchedPatient(patient);
     } else {
-      alert('Paciente no registrado. Intente con: 12.345.678-9');
+      alert('Paciente no registrado en la base de datos.');
       setSearchedPatient(null);
     }
   };
 
   // Create Patient handler
-  const handleCreatePatient = (e: React.FormEvent) => {
+  const handleCreatePatient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!patRut || !patName || !patBirth) {
       alert('Complete los campos obligatorios.');
@@ -118,13 +151,13 @@ export const ReceptionistPortalView: React.FC = () => {
       alert('RUT de paciente no válido. Por favor, ingrese un RUT chileno correcto (ej: 12.345.678-9).');
       return;
     }
-    const exists = mockPatients.some(p => p.rut.trim() === patRut.trim());
+    const exists = patients.some(p => p.rut.trim() === patRut.trim());
     if (exists) {
       alert(`Error: Ya existe el paciente.`);
       return;
     }
     const newPatient: Paciente = {
-      idPaciente: mockPatients.reduce((max, p) => Math.max(max, p.idPaciente), 0) + 1,
+      idPaciente: 0, // Backend will auto-assign
       rut: patRut,
       nombreCompleto: patName,
       fechaNacimiento: patBirth,
@@ -133,14 +166,28 @@ export const ReceptionistPortalView: React.FC = () => {
       direccion: patAddress,
       prevision: patPrevision
     };
-    mockPatients.push(newPatient);
-    alert(`Paciente registrado con éxito.`);
-    setPatRut(''); setPatName(''); setPatBirth(''); setPatPhone(''); setPatEmail(''); setPatAddress('');
-    setRefresh(p => p + 1);
+    try {
+      const res = await fetchWithAuth('http://localhost:8080/api/patients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newPatient)
+      });
+      if (res.ok) {
+        alert(`Paciente registrado con éxito en la base de datos.`);
+        setPatRut(''); setPatName(''); setPatBirth(''); setPatPhone(''); setPatEmail(''); setPatAddress('');
+        loadBackendData();
+      } else {
+        const txt = await res.text();
+        alert(`Error al registrar paciente: ${txt}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error de red al registrar paciente.');
+    }
   };
 
   // Create Doctor handler
-  const handleCreateDoctor = (e: React.FormEvent) => {
+  const handleCreateDoctor = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!docRut || !docName || !docRegistry) {
       alert('Complete los campos obligatorios.');
@@ -150,13 +197,13 @@ export const ReceptionistPortalView: React.FC = () => {
       alert('RUT de médico no válido. Por favor, ingrese un RUT chileno correcto (ej: 12.345.678-9).');
       return;
     }
-    const exists = mockDoctors.some(d => d.rut.trim() === docRut.trim());
+    const exists = doctors.some(d => d.rut.trim() === docRut.trim());
     if (exists) {
       alert('Error: Ya existe el médico.');
       return;
     }
     const newDoctor: ProfesionalSalud = {
-      idProfesional: mockDoctors.reduce((max, d) => Math.max(max, d.idProfesional), 0) + 1,
+      idProfesional: 0, // Backend will auto-assign
       rut: docRut,
       nombreCompleto: docName,
       especialidad: docSpecialty,
@@ -164,14 +211,28 @@ export const ReceptionistPortalView: React.FC = () => {
       horarioAtencion: docHours,
       disponible: true
     };
-    mockDoctors.push(newDoctor);
-    alert('Médico registrado con éxito.');
-    setDocRut(''); setDocName(''); setDocRegistry('');
-    setRefresh(p => p + 1);
+    try {
+      const res = await fetchWithAuth('http://localhost:8080/api/doctors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newDoctor)
+      });
+      if (res.ok) {
+        alert('Médico registrado con éxito en la base de datos.');
+        setDocRut(''); setDocName(''); setDocRegistry('');
+        loadBackendData();
+      } else {
+        const txt = await res.text();
+        alert(`Error al registrar médico: ${txt}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error de red al registrar médico.');
+    }
   };
 
   // Waitlist insert handler
-  const handleWaitlistSubmit = (e: React.FormEvent) => {
+  const handleWaitlistSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!wlRut || !wlName || !wlBirth || !wlDiagnosis) {
       alert('Complete los campos obligatorios.');
@@ -182,10 +243,10 @@ export const ReceptionistPortalView: React.FC = () => {
       return;
     }
 
-    let patient = mockPatients.find(p => p.rut === wlRut);
+    let patient = patients.find(p => p.rut === wlRut);
     if (!patient) {
-      patient = {
-        idPaciente: mockPatients.reduce((max, p) => Math.max(max, p.idPaciente), 0) + 1,
+      const newPatient: Paciente = {
+        idPaciente: 0,
         rut: wlRut,
         nombreCompleto: wlName,
         fechaNacimiento: wlBirth,
@@ -194,7 +255,29 @@ export const ReceptionistPortalView: React.FC = () => {
         direccion: wlAddress,
         prevision: wlPrevision
       };
-      mockPatients.push(patient);
+      try {
+        const patRes = await fetchWithAuth('http://localhost:8080/api/patients', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newPatient)
+        });
+        if (!patRes.ok) {
+          const txt = await patRes.text();
+          alert(`Error al registrar paciente: ${txt}`);
+          return;
+        }
+        patient = await patRes.json();
+        loadBackendData();
+      } catch (err) {
+        console.error(err);
+        alert('Error al registrar paciente en el servidor.');
+        return;
+      }
+    }
+
+    if (!patient) {
+      alert('Error: No se pudo obtener ni crear el registro del paciente.');
+      return;
     }
 
     let basePriority = wlGravity * 15;
@@ -206,7 +289,7 @@ export const ReceptionistPortalView: React.FC = () => {
     const priority = Math.min(100, basePriority + ageBonus);
 
     const newRequest: SolicitudListaEspera = {
-      idSolicitud: requests.reduce((max, r) => Math.max(max, r.idSolicitud), 0) + 1,
+      idSolicitud: 0, // Backend will auto-assign
       idPaciente: patient.idPaciente,
       fechaSolicitud: new Date().toISOString().split('T')[0],
       nivelGravedad: wlGravity,
@@ -217,14 +300,18 @@ export const ReceptionistPortalView: React.FC = () => {
       comentariosMedicos: wlComments
     };
 
-    addRequest(newRequest);
-    alert('Paciente registrado en la lista de espera.');
-    setWlRut(''); setWlName(''); setWlBirth(''); setWlPhone(''); setWlEmail(''); setWlAddress(''); setWlDiagnosis(''); setWlComments('');
+    const saved = await addRequest(newRequest);
+    if (saved) {
+      alert('Paciente registrado en la lista de espera de la base de datos.');
+      setWlRut(''); setWlName(''); setWlBirth(''); setWlPhone(''); setWlEmail(''); setWlAddress(''); setWlDiagnosis(''); setWlComments('');
+    } else {
+      alert('Error al registrar la solicitud de lista de espera.');
+    }
   };
 
   // Autocomplete RUT on waitlist tab
   const handleWlRutBlur = () => {
-    const existing = mockPatients.find(p => p.rut.trim() === wlRut.trim());
+    const existing = patients.find(p => p.rut.trim() === wlRut.trim());
     if (existing) {
       setWlName(existing.nombreCompleto);
       setWlBirth(existing.fechaNacimiento);
@@ -784,7 +871,7 @@ export const ReceptionistPortalView: React.FC = () => {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
               <div>
-                <h4 style={{ fontWeight: 700, color: 'hsl(var(--primary))', marginBottom: '0.5rem' }}>Pacientes ({mockPatients.length})</h4>
+                <h4 style={{ fontWeight: 700, color: 'hsl(var(--primary))', marginBottom: '0.5rem' }}>Pacientes ({patients.length})</h4>
                 <div className="table-container" style={{ maxHeight: '350px', overflowY: 'auto' }}>
                   <table className="medical-table">
                     <thead>
@@ -794,7 +881,7 @@ export const ReceptionistPortalView: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {mockPatients.map(p => (
+                      {patients.map(p => (
                         <tr key={p.idPaciente}>
                           <td style={{ fontWeight: 600, fontSize: '0.85rem' }}>{p.nombreCompleto}</td>
                           <td style={{ fontSize: '0.85rem' }}><code>{p.rut}</code></td>
@@ -806,7 +893,7 @@ export const ReceptionistPortalView: React.FC = () => {
               </div>
 
               <div>
-                <h4 style={{ fontWeight: 700, color: 'hsl(var(--primary))', marginBottom: '0.5rem' }}>Médicos ({mockDoctors.length})</h4>
+                <h4 style={{ fontWeight: 700, color: 'hsl(var(--primary))', marginBottom: '0.5rem' }}>Médicos ({doctors.length})</h4>
                 <div className="table-container" style={{ maxHeight: '350px', overflowY: 'auto' }}>
                   <table className="medical-table">
                     <thead>
@@ -816,7 +903,7 @@ export const ReceptionistPortalView: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {mockDoctors.map(d => (
+                      {doctors.map(d => (
                         <tr key={d.idProfesional}>
                           <td style={{ fontWeight: 600, fontSize: '0.85rem' }}>{d.nombreCompleto}</td>
                           <td style={{ fontSize: '0.85rem' }}>{d.especialidad}</td>

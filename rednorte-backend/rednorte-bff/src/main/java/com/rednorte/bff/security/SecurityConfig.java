@@ -31,7 +31,7 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/login", "/api/doctors", "/api/notifications/stream").permitAll() // login, doctor options list, and SSE stream (authenticated inside filter via query params)
+                .requestMatchers("/api/auth/login", "/api/doctors", "/api/notifications/stream", "/swagger/**").permitAll() // login, doctor options list, SSE stream, and Swagger static assets
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
